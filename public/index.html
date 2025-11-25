@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mikrotik PRO Monitor</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a2e;
+            /* Azul noturno */
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            margin-bottom: 5px;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .subtitle {
+            font-size: 0.9rem;
+            color: #a0a0a0;
+            margin-bottom: 20px;
+            font-family: monospace;
+        }
+
+        /* Container Principal */
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            width: 90%;
+            max-width: 1000px;
+        }
+
+        /* Cartões */
+        .card {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            border: 1px solid #1f2b47;
+        }
+
+        .chart-full {
+            grid-column: span 2;
+        }
+
+        /* Status */
+        .status-dot {
+            height: 10px;
+            width: 10px;
+            background-color: #ff4757;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+            box-shadow: 0 0 10px #ff4757;
+        }
+
+        .connected {
+            background-color: #00ff88;
+            box-shadow: 0 0 10px #00ff88;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>MIKROTIK <span style="color:#e94560">TELEMETRY</span></h1>
+    <div class="subtitle">IP: 192.168.1.86 | Interface: ether1 | Protocol: SNMP v2c</div>
+    <div style="margin-bottom: 20px;">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text" style="font-weight: bold;">Aguardando conexão...</span>
+    </div>
+
+    <div class="dashboard">
+        <div class="card">
+            <h3 style="color: #00d2ff">Download Atual</h3>
+            <div id="gaugeRx"></div>
+        </div>
+
+        <div class="card">
+            <h3 style="color: #f9a825">Upload Atual</h3>
+            <div id="gaugeTx"></div>
+        </div>
+
+        <div class="card chart-full">
+            <h3>Histórico de Tráfego (Mbps)</h3>
+            <div id="areaChart"></div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+
+        // 1. Configuração Comum dos Velocímetros
+        // Aqui está a correção definitiva do Mbps
+        const gaugeOptions = {
+            chart: {
+                type: 'radialBar',
+                height: 250,
+                sparkline: { enabled: true }
+            },
+            plotOptions: {
+                radialBar: {
+                    startAngle: -90, endAngle: 90,
+                    track: { background: "#0f3460", strokeWidth: '97%' },
+                    dataLabels: {
+                        name: { show: false },
+                        value: {
+                            offsetY: -2,
+                            fontSize: '24px',
+                            color: '#fff',
+                            fontWeight: 'bold',
+                            // FORÇA O TEXTO A SER "Mbps" e arredonda o número
+                            formatter: function (val) {
+                                return Math.round(val) + " Mbps";
+                            }
+                        }
+                    }
+                }
+            },
+            // Define o teto como 1000 para a barra encher proporcionalmente
+            yaxis: { max: 1000 },
+            fill: { type: "gradient", gradient: { shade: "dark", type: "horizontal", gradientToColors: ["#e94560"], stops: [0, 100] } },
+            stroke: { lineCap: "butt" },
+            series: [0],
+        };
+
+        // Renderiza Gauge RX
+        let optionsRx = JSON.parse(JSON.stringify(gaugeOptions));
+        // Precisamos recolocar a função formatter pois o JSON.stringify remove funções
+        optionsRx.plotOptions.radialBar.dataLabels.value.formatter = function (val) { return Math.round(val) + " Mbps"; };
+        optionsRx.colors = ["#00d2ff"];
+        const chartRx = new ApexCharts(document.querySelector("#gaugeRx"), optionsRx);
+        chartRx.render();
+
+        // Renderiza Gauge TX
+        let optionsTx = JSON.parse(JSON.stringify(gaugeOptions));
+        // Precisamos recolocar a função formatter pois o JSON.stringify remove funções
+        optionsTx.plotOptions.radialBar.dataLabels.value.formatter = function (val) { return Math.round(val) + " Mbps"; };
+        optionsTx.colors = ["#f9a825"];
+        const chartTx = new ApexCharts(document.querySelector("#gaugeTx"), optionsTx);
+        chartTx.render();
+
+        // 2. Configuração do Gráfico de Área
+        const areaOptions = {
+            series: [{ name: 'Download', data: [] }, { name: 'Upload', data: [] }],
+            chart: {
+                type: 'area', height: 350,
+                animations: { enabled: true, easing: 'linear', dynamicAnimation: { speed: 1000 } },
+                toolbar: { show: false }, zoom: { enabled: false }, background: 'transparent'
+            },
+            colors: ['#00d2ff', '#f9a825'],
+            dataLabels: { enabled: false },
+            stroke: { curve: 'smooth', width: 2 },
+            fill: { type: 'gradient', gradient: { opacityFrom: 0.5, opacityTo: 0.1 } },
+            xaxis: {
+                type: 'category', range: 20,
+                labels: { show: false }, axisBorder: { show: false }, axisTicks: { show: false }
+            },
+            yaxis: {
+                labels: { style: { colors: '#a0a0a0' }, formatter: (value) => { return value.toFixed(0) } },
+                title: { text: 'Velocidade (Mbps)', style: { color: '#a0a0a0' } }
+            },
+            grid: { borderColor: '#1f2b47' },
+            theme: { mode: 'dark' }
+        };
+
+        const areaChart = new ApexCharts(document.querySelector("#areaChart"), areaOptions);
+        areaChart.render();
+
+        // --- DADOS ---
+        let dataRx = [];
+        let dataTx = [];
+
+        socket.on('traffic-data', (data) => {
+            // Status Conectado
+            const dot = document.getElementById('status-dot');
+            const text = document.getElementById('status-text');
+            dot.classList.add('connected');
+            text.innerText = "Monitorando: " + data.time;
+            text.style.color = "#00ff88";
+
+            const rx = parseFloat(data.rx);
+            const tx = parseFloat(data.tx);
+
+            // Atualiza Gauges
+            chartRx.updateSeries([rx]);
+            chartTx.updateSeries([tx]);
+
+            // Atualiza Gráfico de Área
+            dataRx.push(rx);
+            dataTx.push(tx);
+
+            if (dataRx.length > 20) {
+                dataRx.shift();
+                dataTx.shift();
+            }
+
+            areaChart.updateSeries([
+                { name: 'Download', data: dataRx },
+                { name: 'Upload', data: dataTx }
+            ]);
+        });
+    </script>
+
+</body>
+
+</html>
