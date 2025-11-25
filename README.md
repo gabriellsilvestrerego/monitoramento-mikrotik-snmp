@@ -37,4 +37,4 @@ Aplicação Fullstack para monitoramento de tráfego de rede (Throughput) em tem
 5.  Acesse no navegador: `http://localhost:3000`
 
 ---
-*Projeto desenvolvido para a disciplina de Redes de Computadores.*
+*Projeto desenvolvido para a disciplina de Projeto e Administração de Redes.*
