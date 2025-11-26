@@ -1,6 +1,6 @@
-#  Mikrotik Network Telemetry (Real-Time)
+#  Monitoramento de Dowload e Upload Roteador MK
 
-Aplicação Fullstack para monitoramento de tráfego de rede (Throughput) em tempo real via protocolo SNMP. O sistema coleta dados de um roteador Mikrotik virtualizado e exibe métricas instantâneas em um Dashboard interativo estilo NOC.
+Aplicação Fullstack para monitoramento de tráfego de rede em tempo real via protocolo SNMP. O sistema coleta dados de um roteador Mikrotik virtualizado e exibe métricas instantâneas em um Dashboard interativo estilo NOC.
 
 ##  Tecnologias e Arquitetura
 
